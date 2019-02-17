@@ -1,9 +1,20 @@
 import java.io.*;
 import java.util.*;
 
+/**
+ * This program finds numbers that the sum of cube of each digits is the number itself
+ * i.e. 153 = 1^3 + 5^3 + 3^3
+ *
+ * https://www.careercup.com/question?id=5703421944922112
+ * */
 
 class CubeNums {
 
+  /**
+   * Calculate the sum of cube of each digits of num
+   * @param num non-negative integer
+   * @return cubes the sum of cube of each digits
+   * */
   private static int digitCube (int num){
     int cubes = 0;
 
