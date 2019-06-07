@@ -97,6 +97,7 @@ We don't know how many changepoints are there in the data and want to determine 
 * If $n=1000$ and $k=10$,  $2.634096 \times 10^{21}$ solutions
 
 methods to minimize over all possible values of $k$ and $\tau$:
+
 * At Most One Change (`AMOC`) - only for single changepoint problems
 * Binary Segmenation (`BinSeg`) (Scott and Knott (1974)) which is $\mathcal{O}(n\log n)$ in CPU time. *Approximate* but computationally **fast**
 * Segment Neighbourhood (`SegNeigh`) (Auger and Lawrence (1989)) is $\mathcal{O}(Qn^2)$. *Slower* but **exact**
