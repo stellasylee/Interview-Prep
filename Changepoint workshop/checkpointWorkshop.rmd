@@ -1,0 +1,194 @@
+---
+title: "changepoint workshop"
+author: "Stella Lee"
+date: "6/6/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(changepoint)
+library(changepoint.np)
+# Source from: 
+# http://members.cbio.mines-paristech.fr/~thocking/change-tutorial/RK-CptWorkshop.html
+```
+
+# What are Changepoints? 
+changepoint = instance in time where the statistical properties before and after this time point differ
+Mathematically speaking, for data $z_1, \ldots, z_n$, if a changepoint exists at $\tau$, then $z_1,\ldots,z_{\tau}$ differ from $z_{\tau+1},\ldots,z_n$ in some way.  There are many different types of change.
+  
+### goal in changepoint analysis?
+* occurance in change and where?
+* difference between pre and post change data
+* probability that a change has occured?
+* how certain?
+
+### Notation and concepts
+Given the above definition of a changepoint, a change in mean has the following formulation:
+$$
+z_t = \left\{ \begin{array}{lcl} \mu_1 & \mbox{if} & 1\leq t \leq \tau_1 \\
+          \mu_2 & \mbox{if} & \tau_1 < t \leq \tau_2 \\
+          \vdots & & \vdots \\
+          \mu_{k+1} & \mbox{if} & \tau_k < t \leq \tau_{k+1}=n \end{array} \right.
+$$
+You can conceive of changes in all manner of parameters or in entire distributions.  The following plots depict more complicated types of change.  Can you guess where the changes are and what properties are changing?
+
+```{r, echo=F,out.width=450}
+set.seed(1)
+par(mar=c(4,4,.3,.3)) 
+# Change in ar example
+x=1:500
+z=c(arima.sim(model=list(ar=0.8),n=100),arima.sim(model=list(ar=c(0.5,0.2)),n=150),arima.sim(model=list(ar=c(-0.2)),n=200),arima.sim(model=list(ar=c(-0.5)),n=50))
+plot(x,z,type='l',xlab='',ylab='')
+# Change in seasonality and noise
+x=1:500
+z=c(sin(x[1:250]/21)+cos(x[1:250]/21),sin((1.1*x[251:500]/15))+cos((1.1*x[251:500]/15)))
+znoise=z+c(rnorm(100,0,sd=0.1),rnorm(150,0,sd=0.25),rnorm(200,0,sd=0.3),rnorm(50,0,sd=.4))
+plot(x,znoise,type='l',xlab='',ylab='')
+```
+## Online vs Offline
+online - quick detection, arrives as datapoints (constant monitoring)
+offline - all data is received & processed one time
+
+# Single Changepoint
+find the number and position of poitns which the mean changes!
+1. Likelihood Ratio Test:
+
+## changepoint R package 
+cpt.mean - mean only changes
+cpt.val - variance only changes
+cpt.meanvar - mean and variance changes
+
+The core functions cpt.mean, cpt.var, cpt.meanvar output an object of cpt class (unless class=FALSE is set). This is an S4 class containing all the information from the analysis including for example: the data (data.set), inputs set (pen.value,ncpts.max), outputs (cpts,  param.est). The slots are accessed via their names e.g. cpts(x). There are also several standard methods available for the class e.g. plot,  summary. Additional generic functions specific to changepoints are also available including:
+seg.len which returns the lengths of the segments between changepoints;
+ncpts which returns the number of changepoints identified.
+
+## cpt.mean
+cpt.mean(data, penalty="MBIC", pen.value=0, method="AMOC", Q=5, test.stat="Normal", class=TRUE, param.estimates=TRUE,minseglen=1)
+* data - vector or ts object
+* penalty - value used to ascertain what are material changes and what are not, options include: MBIC, SIC, BIC, AIC, Hannan-Quinn, Asymptotic, Manual.
+* pen.value - Type I error for Asymptotic, number or character to be evaluated for manual penalties.
+* method - AMOC, PELT, SegNeigh, BinSeg.
+* Q - max number of changes for SegNeigh or BinSeg.
+* test.stat - Test statistic, Normal or CUSUM.
+* class - return a cpt object or not.
+* param.estimates - return parameter estimates or not.
+* minseglen - minimum number of data points between changes.
+
+```{r}
+# Single Change in Mean 
+# simulate Normal distributed data with a single change in mean
+set.seed(1)
+m1 = c(rnorm(100,0,1), rnorm(100,5,1))
+#plot(m1)
+m1.amoc = cpt.mean(m1)
+cpts(m1.amoc)
+# m1.cusum = cpt.mean(m1, pen.value = 1, penalty = 'Manual', test.stat = 'CUSUM')
+# above line uses default values of a single change (method = 'AMOC') in a normal distribution (test.stat = "Normal") with the MBIC penalty (penalty = "MBIC")
+plot(m1.amoc)
+```
+
+# Multiple Changepoints
+We don't know how many changepoints are there in the data and want to determine multiple changes
+
+### Methods in the changepoint package
+* For $n$ data points there are $2^{n-1}$ possible solutions
+* If $k$ is known there are still $\binom{n-1}{k-1}$ solutions
+* If $n=1000$ and $k=10$,  $2.634096 \times 10^{21}$ solutions
+
+methods to minimize over all possible values of $k$ and $\tau$:
+* At Most One Change (`AMOC`) - only for single changepoint problems
+* Binary Segmenation (`BinSeg`) (Scott and Knott (1974)) which is $\mathcal{O}(n\log n)$ in CPU time. *Approximate* but computationally **fast**
+* Segment Neighbourhood (`SegNeigh`) (Auger and Lawrence (1989)) is $\mathcal{O}(Qn^2)$. *Slower* but **exact**
+* Pruned Exact Linear Time (`PELT`) (Killick et al. (2012)) At worst  $\mathcal{O}(n^2)$. For linear penalties $f(k)=k$, scaling changes, $\mathcal{O}(n)$. 
+**Fast** and **exact**
+
+(system.time() allows to check time)
+
+## cpt.var
+cpt.var(data, penalty, pen.value, know.mean=FALSE, mu=NA, method, Q, test.stat="Normal", class, param.estimates, minseglen=2)
+
+The additional arguments are:
+know.mean - if known we don’t count it as an estimated parameter when calculating penalties.
+mu - Mean if known.
+test.stat - Normal or CSS (cumulative sums of squares)
+minseglen - Default is 2
+```{r}
+set.seed(1)
+v1 = c(rnorm(100,0,1), rnorm(100,0,2), rnorm(100,0,10), rnorm(100,0,9))
+v1.man = cpt.var(v1, method = 'PELT', penalty = "Manual", pen.value = "2*log(n)")
+cpts(v1.man)
+param.est(v1.man)
+plot(v1.man, cpt.width = 3)
+```
+
+## cpt.meanvar
+cpt.meanvar(data, penalty, pen.value, method, Q, test.stat="Normal", class, param.estimates, shape=1,minseglen=2) 
+Q is maximum number of changepoints that the algorithm will fine
+If the solution gives Q changepoints a warning --> increase Q (there mgiht more changes that missing currently)
+The different arguments here are:
+test.stat - choice of Normal, Gamma, Exponential, Poisson.
+shape - assumed shape parameter for Gamma.
+minseglen - minimum segment length of 2
+```{r}
+set.seed(1)
+mv1=c(rexp(50,rate=1), rexp(50,5), rexp(50,2), rexp(50,7))
+mv1.binseg=cpt.meanvar(mv1,test.stat='Exponential',method='BinSeg',Q=10,penalty="SIC")
+cpts(mv1.binseg)
+param.est(mv1.binseg)
+plot(mv1.binseg,cpt.width=3,cpt.col='blue')
+```
+
+## How many changes?
+penalty values?
+Enter CROPS: Changepoints for a range of penalties
+Using penalty='CROPS' with method='PELT' you can specify minimum and maximum penalty values and it returns all segmentations for any penalty between these values. These are computed in an efficient manner with a very small number of runs of the PELT algorithm. Once all the segmentations have been calculated we can then decide on the number of changepoints.
+```{r}
+v1.crops=cpt.var(v1,method="PELT",penalty="CROPS",pen.value=c(5,500))
+cpts.full(v1.crops) #cpts.full to get the range of segmentations
+# when up to 8 changes are in the model we still don't have any changes around point 300
+# retrieve the penalty boundary points: 
+pen.value.full(v1.crops)
+# when using BinSeg or CROPS as a range of changepoints are given as output we can use additional arguement in the plot generic (allow us to select how many changes we want in the plot)
+plot(v1.crops, ncpts=5) 
+# construct diagnostic plot:
+plot(v1.crops, diagnostic = TRUE) 
+```
+
+if true changepoint is added to the model, then the improvement in fit will be large
+once all the true changes have been added the false changes will not improve the fit much
+
+## cpt.np
+What if we want to find a general change in distribution?
+==> changepoint.np package
+
+cpt.np(data, penalty, pen.value, method, test.stat="empirical_distribution", class, minseglen=1, nquantiles=10)
+
+Note that again the same underlying structure as cpt.mean is preserved. The additional arguments are:
+test.stat - choice of empirical_distribution
+minseglen - minimum segment length of 1
+nquantiles - number of quantiles to use
+The empirical_distribution test statistic allows us to use quantiles of an empirical distrubtion function to identify changes in distribution. The method automatically choose which quantiles based on the number of quantiles (nquantiles). Obviously a large number of quantiles allows for more subtle changes in distribution to be detected but also required more computational time. Note that the quantiles are not evenly spread and are weighted more to the tails as this is where changes are often apparent.
+```{r}
+set.seed(12)
+J <- function(x){(1+sign(x))/2}
+n <- 1000
+tau <- c(0.1,0.13,0.15,0.23,0.25,0.4,0.44,0.65,0.76,0.78,0.81)*n
+h <- c(2.01, -2.51, 1.51, -2.01, 2.51, -2.11, 1.05, 2.16,-1.56, 2.56, -2.11)
+sigma <- 0.5
+t <- seq(0,1,length.out = n)
+data <- array()
+for (i in 1:n){
+   data[i] <- sum(h*J(n*t[i] - tau)) + (sigma * rnorm(1))
+}
+ts.plot(data)
+
+out <- cpt.np(data, method="PELT",minseglen=2, nquantiles =4*log(length(data)))
+cpts(out)
+plot(out)
+```
+
+# Checking Assumptions
+## Segment check
+## Residual check
+## Task 
